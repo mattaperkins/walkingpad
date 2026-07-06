@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div>
+    <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+        <h1 class="content-title mb-0">History</h1>
+        <a href="{{ url_for('root') }}" class="btn btn-custom-primary">Current</a>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md col-6">
+            <div class="stat-card">
+                <p class="stat-label">Sessions</p>
+                <p class="stat-value">{{ summary.sessions }}</p>
+            </div>
+        </div>
+        <div class="col-md col-6">
+            <div class="stat-card">
+                <p class="stat-label">Time</p>
+                <p class="stat-value">{{ summary.duration }}</p>
+            </div>
+        </div>
+        <div class="col-md col-6">
+            <div class="stat-card">
+                <p class="stat-label">Distance</p>
+                <p class="stat-value">{{ "%.2f"|format(summary.distance_km) }} km</p>
+            </div>
+        </div>
+        <div class="col-md col-6">
+            <div class="stat-card">
+                <p class="stat-label">Steps</p>
+                <p class="stat-value">{{ summary.steps }}</p>
+            </div>
+        </div>
+        <div class="col-md col-12">
+            <div class="stat-card">
+                <p class="stat-label">Kilojoules</p>
+                <p class="stat-value">{{ summary.kilojoules }}</p>
+            </div>
+        </div>
+    </div>
+
+    {% if sessions %}
+        <div class="table-responsive">
+            <table class="table history-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Duration</th>
+                        <th>Speed</th>
+                        <th>Distance</th>
+                        <th>Steps</th>
+                        <th>kJ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td>{{ session.date }}</td>
+                        <td>{{ session.time }}</td>
+                        <td>{{ session.duration }}</td>
+                        <td>{{ session.speed_range_kmh }} km/h</td>
+                        <td>{{ session.distance_km }} km</td>
+                        <td>{{ session.steps }}</td>
+                        <td>{{ session.kilojoules }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="stat-card text-center">
+            <p class="stat-label mb-0">No saved sessions yet.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

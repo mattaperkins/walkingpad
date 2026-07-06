@@ -1,0 +1,16 @@
+#!/bin/zsh
+set -e
+
+APP_DIR="/Users/matt/walkingpad"
+LOG_DIR="$HOME/Library/Logs"
+LOG_FILE="$LOG_DIR/WalkingPad.log"
+
+mkdir -p "$LOG_DIR"
+cd "$APP_DIR"
+
+if [[ ! -x venv/bin/python ]]; then
+  osascript -e 'display alert "WalkingPad is not installed correctly" message "The Python virtual environment was not found at /Users/matt/walkingpad/venv."'
+  exit 1
+fi
+
+exec venv/bin/python launch_app.py >> "$LOG_FILE" 2>&1

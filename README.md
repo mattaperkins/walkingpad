@@ -18,10 +18,10 @@ This application was built for my own needs, but can be easily adapted for your 
     * Automatically detects if you've stepped off the WalkingPad or if it's stopped by the remote, and transitions the app to a paused state.
     * Resumes from these auto-pauses at a stable speed from before the interruption.
 * **Dynamic Stat Tracking:** Displays and updates live session data:
-    * Current Speed (mph)
-    * Cumulative Distance (miles)
+    * Current Speed (km/h)
+    * Cumulative Distance (km)
     * Cumulative Steps
-    * Estimated Calories Burned
+    * Estimated Kilojoules Burned
     * Cumulative Active Time (H:M:S format)
 * **Precise Speed Adjustments:**
     * Increase/Decrease speed buttons.
@@ -57,6 +57,11 @@ This application is known to work with the **WalkingPad C1** model.
 It *should* also work with other WalkingPad models supported by the underlying `ph4-walkingpad` Python library, such as A1 and R1 PRO. Compatibility may vary depending on the specific model and firmware.
 
 ## Credit & Core Dependency
+
+This repository is a personal fork of **CodeJawn/walkingpad**:
+[https://github.com/CodeJawn/walkingpad](https://github.com/CodeJawn/walkingpad)
+
+Original WalkingPad Web Controller application by **CodeJawn**. Local changes in this fork add macOS launch packaging, metric/kilojoule display, LAN launch behavior, mobile-friendly controls, and session history.
 
 This application relies heavily on the excellent **`ph4-walkingpad`** Python library created by **ph4x** for Bluetooth communication and control of the WalkingPad. This project would not be possible without their work in reverse-engineering the protocol and providing the control interface.
 
@@ -121,7 +126,7 @@ This application uses the `waitress` WSGI server for a more stable experience th
     ```bash
     python run.py
     ```
-4.  The script will start the `waitress` server and automatically open the application in your default web browser at `http://127.0.0.1:5000`.
+4.  The script will start the `waitress` server and automatically open the application in your default web browser at the LAN-facing URL on port `5055`.
 5.  The console window running `run.py` will display logs from the application. You can stop the server by pressing `Ctrl+C` in this window, or by using the "Close" button in the web application's header.
 
 **For easy launching on Windows:**
@@ -141,7 +146,7 @@ A `start_app.bat` script is provided to automate VENV activation and running `ru
 
 3.  **Active Session:**
     * The "Active Session" screen will appear.
-    * Stat cards (Time, Speed, Distance, Steps, Calories) will update dynamically.
+    * Stat cards (Time, Speed, Distance, Steps, Kilojoules) will update dynamically.
     * Control buttons are available:
         * **Slow:** Sets speed to a predefined slow walk (~2.8 MPH).
         * **Decrease:** Lowers speed by a small step.

@@ -1,8 +1,11 @@
 import asyncio
+import csv
+import datetime as dt
 import logging
 import os
 import threading
 import webbrowser
+from pathlib import Path
 from threading import Timer
 import time
 from collections import deque
@@ -20,20 +23,18 @@ logging.basicConfig(
 )
 
 # ── Conversion constants ─────────────────────────────────────────────────
-KM_TO_MI = 0.621371
-KMH_TO_MPH = 0.621371
-KCAL_PER_MILE = 95  # rough kcal per mile
+KJ_PER_KM = 247  # rough kilojoules per kilometer
 
 # Speed control constants
-MAX_SPEED_KMH = 6.0  # Approx 3.7 mph, a common max for these pads
+MAX_SPEED_KMH = 6.0
 MIN_SPEED_KMH = 1.0
 SPEED_STEP = 0.6  # Speed change per button press in km/h
-SLOW_WALK_SPEED_KMH = 4.5 # Approx 2.8 MPH
+SLOW_WALK_SPEED_KMH = 4.5
 
 
 
-def kcal_estimate(miles: float) -> float:
-    return KCAL_PER_MILE * miles
+def kilojoule_estimate(kilometers: float) -> float:
+    return KJ_PER_KM * kilometers
 
 # In app.py
 def format_seconds_to_hms(total_seconds):
@@ -46,6 +47,7 @@ def format_seconds_to_hms(total_seconds):
 
 # ── Flask & global state ────────────────────────────────────────────────
 app = Flask(__name__)
+HISTORY_PATH = Path.home() / "history.csv"
 
 connected = connecting = connection_failed = False
 ble_loop: asyncio.AbstractEventLoop | None = None
@@ -59,8 +61,11 @@ resume_speed_kmh = 2.0  # default if none yet
 
 current_speed_kmh = current_distance_km = 0.0
 current_steps = 0
-current_calories = 0.0
+current_kilojoules = 0.0
 current_session_active_seconds = 0 
+session_started_at: dt.datetime | None = None
+session_min_speed_kmh: float | None = None
+session_max_speed_kmh: float | None = None
 
 _last_dev_dist = _last_dev_steps = 0
 
@@ -72,6 +77,25 @@ def inject_flags():
 
 
 # ── BLE helpers ─────────────────────────────────────────────────────────
+def _register_disconnect_callback():
+    """Register a disconnect callback across Bleak API versions."""
+    if not controller or not getattr(controller, "client", None):
+        return
+
+    client = controller.client
+
+    if hasattr(client, "set_disconnected_callback"):
+        client.set_disconnected_callback(_handle_disconnect)
+        return
+
+    backend = getattr(client, "_backend", None)
+    if hasattr(backend, "set_disconnected_callback"):
+        backend.set_disconnected_callback(lambda: _handle_disconnect(client))
+        return
+
+    logging.warning("Bleak client does not support disconnected callbacks.")
+
+
 async def _connect_to_pad() -> bool:
     global controller, _pad_address
     dev = None
@@ -103,8 +127,7 @@ async def _connect_to_pad() -> bool:
     controller = Controller()
     await controller.run(dev.address)
 
-    if hasattr(controller, "client") and controller.client:
-        controller.client.set_disconnected_callback(_handle_disconnect)
+    _register_disconnect_callback()
 
     await controller.switch_mode(WalkingPad.MODE_MANUAL)
 
@@ -136,7 +159,8 @@ async def _connect_to_pad() -> bool:
 def process_status_packet(dev_dist, dev_steps, dev_speed):
     """Update cumulative stats from raw values AND handle auto-pause."""
     global belt_running, resume_speed_kmh, _auto_pause_grace_until
-    global current_speed_kmh, current_distance_km, current_steps, current_calories
+    global current_speed_kmh, current_distance_km, current_steps, current_kilojoules
+    global session_min_speed_kmh, session_max_speed_kmh
     global _last_dev_dist, _last_dev_steps
 
     new_reported_speed_kmh = dev_speed / 10.0
@@ -144,6 +168,12 @@ def process_status_packet(dev_dist, dev_steps, dev_speed):
     # Continuously populate the speed history with stable, non-zero speeds.
     if belt_running and new_reported_speed_kmh > MIN_SPEED_KMH:
         speed_history.append(new_reported_speed_kmh)
+
+    if session_active and new_reported_speed_kmh > 0:
+        if session_min_speed_kmh is None or new_reported_speed_kmh < session_min_speed_kmh:
+            session_min_speed_kmh = new_reported_speed_kmh
+        if session_max_speed_kmh is None or new_reported_speed_kmh > session_max_speed_kmh:
+            session_max_speed_kmh = new_reported_speed_kmh
 
     # AUTO-PAUSE LOGIC
     if time.time() > _auto_pause_grace_until:
@@ -172,7 +202,7 @@ def process_status_packet(dev_dist, dev_steps, dev_speed):
     _last_dev_steps = dev_steps
 
     current_speed_kmh = new_reported_speed_kmh
-    current_calories = kcal_estimate(current_distance_km * KM_TO_MI)
+    current_kilojoules = kilojoule_estimate(current_distance_km)
 
 
 async def _stats_monitor():
@@ -258,10 +288,10 @@ def root():
 
     return render_template(
         template,
-        speed=current_speed_kmh * KMH_TO_MPH,
-        distance=current_distance_km * KM_TO_MI,
+        speed=current_speed_kmh,
+        distance=current_distance_km,
         steps=current_steps,
-        calories=current_calories,
+        kilojoules=current_kilojoules,
         time_active=time_active_display 
     )
 
@@ -274,17 +304,63 @@ def reconnect():
     return redirect(url_for("root"))
 
 
+def load_session_history():
+    if not HISTORY_PATH.exists():
+        return []
+
+    with HISTORY_PATH.open(newline="") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    rows.reverse()
+    return rows
+
+
+def history_summary(rows):
+    total_distance = 0.0
+    total_steps = 0
+    total_kilojoules = 0
+    total_seconds = 0
+
+    for row in rows:
+        try:
+            total_distance += float(row.get("distance_km", 0) or 0)
+            total_steps += int(row.get("steps", 0) or 0)
+            total_kilojoules += int(row.get("kilojoules", 0) or 0)
+
+            hours, minutes, seconds = (int(part) for part in row.get("duration", "0:00:00").split(":"))
+            total_seconds += hours * 3600 + minutes * 60 + seconds
+        except (TypeError, ValueError):
+            continue
+
+    return {
+        "sessions": len(rows),
+        "duration": format_seconds_to_hms(total_seconds),
+        "distance_km": total_distance,
+        "steps": total_steps,
+        "kilojoules": total_kilojoules,
+    }
+
+
+@app.route("/history")
+def history():
+    rows = load_session_history()
+    return render_template("history.html", sessions=rows, summary=history_summary(rows))
+
+
 @app.route("/start")
 def start_session():
     """Begin a new session: reset counters, start belt, launch stats monitor."""
-    global session_active, belt_running, current_distance_km, current_steps, current_calories, resume_speed_kmh
-    global current_session_active_seconds
+    global session_active, belt_running, current_distance_km, current_steps, current_kilojoules, resume_speed_kmh
+    global current_session_active_seconds, session_started_at, session_min_speed_kmh, session_max_speed_kmh
 
     if not connected:
         return redirect(url_for("root"))
 
-    current_distance_km = current_steps = current_calories = 0.0
+    current_distance_km = current_steps = current_kilojoules = 0.0
     current_session_active_seconds = 0
+    session_started_at = dt.datetime.now()
+    session_min_speed_kmh = None
+    session_max_speed_kmh = None
     resume_speed_kmh = 2.0
     speed_history.clear() 
 
@@ -424,10 +500,10 @@ def stats_json():
     data = dict(
         is_connected=connected,      
         is_running=belt_running,     
-        speed=round(current_speed_kmh * KMH_TO_MPH, 1),
-        distance=round(current_distance_km * KM_TO_MI, 2),
+        speed=round(current_speed_kmh, 1),
+        distance=round(current_distance_km, 2),
         steps=current_steps,
-        calories=round(current_calories),
+        kilojoules=round(current_kilojoules),
         time_active=formatted_time_active 
     )
 
@@ -437,9 +513,54 @@ def stats_json():
 
 
 # ── Shutdown endpoint ──────────────────────────────────────────────────
+def save_session_history():
+    if not session_active:
+        return
+
+    started_at = session_started_at or dt.datetime.now()
+    min_speed = session_min_speed_kmh or 0.0
+    max_speed = session_max_speed_kmh or 0.0
+    row = {
+        "date": started_at.strftime("%Y-%m-%d"),
+        "time": started_at.strftime("%H:%M:%S"),
+        "duration": format_seconds_to_hms(current_session_active_seconds),
+        "speed_range_kmh": f"{min_speed:.1f}-{max_speed:.1f}",
+        "distance_km": f"{current_distance_km:.2f}",
+        "steps": int(current_steps),
+        "kilojoules": round(current_kilojoules),
+    }
+    fieldnames = list(row.keys())
+    write_header = not HISTORY_PATH.exists() or HISTORY_PATH.stat().st_size == 0
+
+    with HISTORY_PATH.open("a", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+    logging.info(f"Saved session history to {HISTORY_PATH}")
+
+
+def stop_belt_before_shutdown():
+    global belt_running
+    if not belt_running or not controller or not ble_loop:
+        return
+
+    logging.info("Stopping belt before shutdown...")
+    try:
+        future = asyncio.run_coroutine_threadsafe(controller.stop_belt(), ble_loop)
+        future.result(timeout=3)
+    except Exception as exc:
+        logging.warning(f"Could not confirm belt stop before shutdown: {exc}")
+    finally:
+        belt_running = False
+
+
 @app.route("/shutdown", methods=['POST'])
 def shutdown():
-    """Forcefully shut down the Flask application process."""
+    """Save session history, stop the belt if needed, and shut down."""
+    stop_belt_before_shutdown()
+    save_session_history()
     logging.info("Server shutting down via forceful exit...")
     os._exit(0)
 
