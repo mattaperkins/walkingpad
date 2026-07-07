@@ -315,6 +315,7 @@ def load_session_history():
         for row in csv.DictReader(csv_file):
             try:
                 row["_date_obj"] = dt.datetime.strptime(row.get("date", ""), "%Y-%m-%d").date()
+                row["_time_obj"] = dt.datetime.strptime(row.get("time", "00:00:00"), "%H:%M:%S").time()
                 row["_duration_seconds"] = parse_duration_seconds(row.get("duration", "0:00:00"))
                 row["_distance_km"] = float(row.get("distance_km", 0) or 0)
                 row["_steps"] = int(row.get("steps", 0) or 0)
@@ -325,7 +326,7 @@ def load_session_history():
                 continue
             rows.append(row)
 
-    rows.sort(key=lambda row: row["_date_obj"], reverse=True)
+    rows.sort(key=lambda row: (row["_date_obj"], row["_time_obj"]), reverse=True)
     return rows
 
 
@@ -347,6 +348,17 @@ def empty_history_group(label, sort_key):
         "distance_km": 0.0,
         "steps": 0,
         "kilojoules": 0,
+    }
+
+
+def session_history_detail(row):
+    return {
+        "time": row.get("time", ""),
+        "duration": row.get("duration", "0:00:00"),
+        "speed_range_kmh": row.get("speed_range_kmh", "0.0-0.0"),
+        "distance_km": row["_distance_km"],
+        "steps": row["_steps"],
+        "kilojoules": row["_kilojoules"],
     }
 
 
@@ -384,6 +396,7 @@ def aggregate_history(rows):
     months = {}
     weeks = {}
     days = {}
+    today = dt.date.today()
 
     for row in rows:
         session_date = row["_date_obj"]
@@ -405,10 +418,14 @@ def aggregate_history(rows):
 
         if session_date not in days:
             days[session_date] = empty_history_group(session_date.strftime("%a %d %b %Y"), session_date)
+            days[session_date]["sessions_detail"] = []
+            days[session_date]["is_today"] = session_date == today
 
         add_history_row(months[month_key], row)
         add_history_row(weeks[week_key], row)
         add_history_row(days[session_date], row)
+        if session_date == today:
+            days[session_date]["sessions_detail"].append(session_history_detail(row))
 
     for day_key, day_group in days.items():
         week_key = day_key.isocalendar()[:2]

@@ -109,6 +109,39 @@
                                     <td>{{ day.steps }}</td>
                                     <td>{{ day.kilojoules }}</td>
                                 </tr>
+                                {% if day.sessions_detail %}
+                                <tr class="history-session-row">
+                                    <td colspan="6">
+                                        <div class="history-session-title">Today&apos;s Sessions</div>
+                                        <div class="table-responsive">
+                                            <table class="table history-session-table align-middle mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Start</th>
+                                                        <th>Time</th>
+                                                        <th>Speed</th>
+                                                        <th>Distance</th>
+                                                        <th>Steps</th>
+                                                        <th>kJ</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for session in day.sessions_detail %}
+                                                    <tr>
+                                                        <td>{{ session.time }}</td>
+                                                        <td>{{ session.duration }}</td>
+                                                        <td>{{ session.speed_range_kmh }} km/h</td>
+                                                        <td>{{ "%.2f"|format(session.distance_km) }} km</td>
+                                                        <td>{{ session.steps }}</td>
+                                                        <td>{{ session.kilojoules }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
                                 {% endfor %}
                             </tbody>
                         </table>
