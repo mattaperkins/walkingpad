@@ -36,7 +36,16 @@
         </div>
     </div>
 
-    <a href="{{ url_for('resume_session') }}" class="btn btn-custom-primary">Resume</a>
+    <div class="session-controls d-flex justify-content-center gap-3 flex-wrap">
+        <a href="{{ url_for('resume_session') }}" class="btn btn-custom-primary d-flex align-items-center gap-2">
+            <i class="bi bi-play-fill"></i> Resume
+        </a>
+        <form action="{{ url_for('end_session') }}" method="post" class="m-0">
+            <button type="submit" class="btn btn-custom-primary d-flex align-items-center gap-2">
+                <i class="bi bi-stop-circle-fill"></i> End
+            </button>
+        </form>
+    </div>
 </div>
 
 <script>

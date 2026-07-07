@@ -189,20 +189,22 @@ def process_status_packet(dev_dist, dev_steps, dev_speed):
 
             belt_running = False
 
-    # CUMULATIVE STATS LOGIC (is unchanged)
-    # ...
     if dev_dist < _last_dev_dist:
         _last_dev_dist = 0
-    current_distance_km += (dev_dist - _last_dev_dist) / 100.0
+    distance_delta_km = (dev_dist - _last_dev_dist) / 100.0
     _last_dev_dist = dev_dist
 
     if dev_steps < _last_dev_steps:
         _last_dev_steps = 0
-    current_steps += dev_steps - _last_dev_steps
+    steps_delta = dev_steps - _last_dev_steps
     _last_dev_steps = dev_steps
 
+    if session_active:
+        current_distance_km += distance_delta_km
+        current_steps += steps_delta
+        current_kilojoules = kilojoule_estimate(current_distance_km)
+
     current_speed_kmh = new_reported_speed_kmh
-    current_kilojoules = kilojoule_estimate(current_distance_km)
 
 
 async def _stats_monitor():
@@ -379,6 +381,35 @@ def start_session():
     return redirect(url_for("root"))
 
 
+def reset_session_state():
+    global session_active, belt_running, resume_speed_kmh
+    global current_speed_kmh, current_distance_km, current_steps, current_kilojoules
+    global current_session_active_seconds, session_started_at, session_min_speed_kmh, session_max_speed_kmh
+
+    session_active = False
+    belt_running = False
+    resume_speed_kmh = 2.0
+    current_speed_kmh = current_distance_km = current_kilojoules = 0.0
+    current_steps = 0
+    current_session_active_seconds = 0
+    session_started_at = None
+    session_min_speed_kmh = None
+    session_max_speed_kmh = None
+    speed_history.clear()
+
+
+@app.route("/end_session", methods=["POST"])
+def end_session():
+    """Save the current session and reset counters without stopping the server."""
+    if not session_active:
+        return redirect(url_for("root"))
+
+    save_session_history()
+    stop_belt_before_shutdown()
+    reset_session_state()
+    return redirect(url_for("root"))
+
+
 # ── Pause / Resume ───────────────────────────────────────────────────────
 
 @app.route("/pause", endpoint="pause")
@@ -515,6 +546,9 @@ def stats_json():
 # ── Shutdown endpoint ──────────────────────────────────────────────────
 def save_session_history():
     if not session_active:
+        return
+    if current_distance_km == 0 and current_steps == 0 and current_kilojoules == 0:
+        logging.info("Skipping empty session history save.")
         return
 
     started_at = session_started_at or dt.datetime.now()

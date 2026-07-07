@@ -45,6 +45,11 @@
         <a href="{{ url_for('pause_session') }}" class="btn btn-custom-primary d-flex align-items-center gap-2">
             <i class="bi bi-pause-fill"></i> Pause
         </a>
+        <form action="{{ url_for('end_session') }}" method="post" class="m-0">
+            <button type="submit" class="btn btn-custom-primary d-flex align-items-center gap-2">
+                <i class="bi bi-stop-circle-fill"></i> End
+            </button>
+        </form>
         <a href="{{ url_for('increase_speed') }}" class="btn btn-custom-primary d-flex align-items-center gap-2">
             <i class="bi bi-plus-lg"></i> Increase
         </a>
