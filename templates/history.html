@@ -43,6 +43,18 @@
         {% if grouped_history.today_sessions %}
         <section class="mb-5">
             <h2 class="history-section-title">Today&apos;s Sessions</h2>
+            <div class="history-week-header">
+                <div>
+                    <p class="history-week-label">{{ grouped_history.today_total.label }}</p>
+                    <p class="history-week-meta">{{ grouped_history.today_total.sessions }} sessions</p>
+                </div>
+                <div class="history-week-stats">
+                    <span>{{ grouped_history.today_total.duration }}</span>
+                    <span>{{ "%.2f"|format(grouped_history.today_total.distance_km) }} km</span>
+                    <span>{{ grouped_history.today_total.steps }} steps</span>
+                    <span>{{ grouped_history.today_total.kilojoules }} kJ</span>
+                </div>
+            </div>
             <div class="table-responsive">
                 <table class="table history-table align-middle">
                     <thead>

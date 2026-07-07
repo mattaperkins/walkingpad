@@ -437,6 +437,7 @@ def aggregate_history(rows):
     return {
         "months": sorted(months.values(), key=lambda group: group["sort_key"], reverse=True),
         "weeks": week_groups,
+        "today_total": days.get(today),
         "today_sessions": today_sessions,
     }
 
