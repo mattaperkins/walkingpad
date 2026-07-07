@@ -397,6 +397,7 @@ def aggregate_history(rows):
     weeks = {}
     days = {}
     today = dt.date.today()
+    today_sessions = []
 
     for row in rows:
         session_date = row["_date_obj"]
@@ -418,14 +419,12 @@ def aggregate_history(rows):
 
         if session_date not in days:
             days[session_date] = empty_history_group(session_date.strftime("%a %d %b %Y"), session_date)
-            days[session_date]["sessions_detail"] = []
-            days[session_date]["is_today"] = session_date == today
 
         add_history_row(months[month_key], row)
         add_history_row(weeks[week_key], row)
         add_history_row(days[session_date], row)
         if session_date == today:
-            days[session_date]["sessions_detail"].append(session_history_detail(row))
+            today_sessions.append(session_history_detail(row))
 
     for day_key, day_group in days.items():
         week_key = day_key.isocalendar()[:2]
@@ -438,6 +437,7 @@ def aggregate_history(rows):
     return {
         "months": sorted(months.values(), key=lambda group: group["sort_key"], reverse=True),
         "weeks": week_groups,
+        "today_sessions": today_sessions,
     }
 
 
