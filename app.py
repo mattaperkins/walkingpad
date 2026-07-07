@@ -311,10 +311,52 @@ def load_session_history():
         return []
 
     with HISTORY_PATH.open(newline="") as csv_file:
-        rows = list(csv.DictReader(csv_file))
+        rows = []
+        for row in csv.DictReader(csv_file):
+            try:
+                row["_date_obj"] = dt.datetime.strptime(row.get("date", ""), "%Y-%m-%d").date()
+                row["_duration_seconds"] = parse_duration_seconds(row.get("duration", "0:00:00"))
+                row["_distance_km"] = float(row.get("distance_km", 0) or 0)
+                row["_steps"] = int(row.get("steps", 0) or 0)
+                row["_kilojoules"] = int(row.get("kilojoules", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if row["_distance_km"] == 0 and row["_steps"] == 0 and row["_kilojoules"] == 0:
+                continue
+            rows.append(row)
 
-    rows.reverse()
+    rows.sort(key=lambda row: row["_date_obj"], reverse=True)
     return rows
+
+
+def parse_duration_seconds(duration):
+    parts = [int(part) for part in duration.split(":")]
+    if len(parts) != 3:
+        raise ValueError("duration must be H:MM:SS")
+    hours, minutes, seconds = parts
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def empty_history_group(label, sort_key):
+    return {
+        "label": label,
+        "sort_key": sort_key,
+        "sessions": 0,
+        "duration_seconds": 0,
+        "duration": "0:00:00",
+        "distance_km": 0.0,
+        "steps": 0,
+        "kilojoules": 0,
+    }
+
+
+def add_history_row(group, row):
+    group["sessions"] += 1
+    group["duration_seconds"] += row["_duration_seconds"]
+    group["distance_km"] += row["_distance_km"]
+    group["steps"] += row["_steps"]
+    group["kilojoules"] += row["_kilojoules"]
+    group["duration"] = format_seconds_to_hms(group["duration_seconds"])
 
 
 def history_summary(rows):
@@ -324,15 +366,10 @@ def history_summary(rows):
     total_seconds = 0
 
     for row in rows:
-        try:
-            total_distance += float(row.get("distance_km", 0) or 0)
-            total_steps += int(row.get("steps", 0) or 0)
-            total_kilojoules += int(row.get("kilojoules", 0) or 0)
-
-            hours, minutes, seconds = (int(part) for part in row.get("duration", "0:00:00").split(":"))
-            total_seconds += hours * 3600 + minutes * 60 + seconds
-        except (TypeError, ValueError):
-            continue
+        total_distance += row["_distance_km"]
+        total_steps += row["_steps"]
+        total_kilojoules += row["_kilojoules"]
+        total_seconds += row["_duration_seconds"]
 
     return {
         "sessions": len(rows),
@@ -343,10 +380,58 @@ def history_summary(rows):
     }
 
 
+def aggregate_history(rows):
+    months = {}
+    weeks = {}
+    days = {}
+
+    for row in rows:
+        session_date = row["_date_obj"]
+        iso_year, iso_week, _weekday = session_date.isocalendar()
+        week_start = session_date - dt.timedelta(days=session_date.weekday())
+        week_end = week_start + dt.timedelta(days=6)
+        week_key = (iso_year, iso_week)
+        month_key = (session_date.year, session_date.month)
+
+        if month_key not in months:
+            months[month_key] = empty_history_group(session_date.strftime("%B %Y"), month_key)
+
+        if week_key not in weeks:
+            weeks[week_key] = empty_history_group(
+                f"{week_start.strftime('%d %b')} - {week_end.strftime('%d %b %Y')}",
+                week_start,
+            )
+            weeks[week_key]["days"] = {}
+
+        if session_date not in days:
+            days[session_date] = empty_history_group(session_date.strftime("%a %d %b %Y"), session_date)
+
+        add_history_row(months[month_key], row)
+        add_history_row(weeks[week_key], row)
+        add_history_row(days[session_date], row)
+
+    for day_key, day_group in days.items():
+        week_key = day_key.isocalendar()[:2]
+        weeks[week_key]["days"][day_key] = day_group
+
+    week_groups = sorted(weeks.values(), key=lambda group: group["sort_key"], reverse=True)
+    for week in week_groups:
+        week["days"] = sorted(week["days"].values(), key=lambda group: group["sort_key"], reverse=True)
+
+    return {
+        "months": sorted(months.values(), key=lambda group: group["sort_key"], reverse=True),
+        "weeks": week_groups,
+    }
+
+
 @app.route("/history")
 def history():
     rows = load_session_history()
-    return render_template("history.html", sessions=rows, summary=history_summary(rows))
+    return render_template(
+        "history.html",
+        summary=history_summary(rows),
+        grouped_history=aggregate_history(rows),
+    )
 
 
 @app.route("/start")

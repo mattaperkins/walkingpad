@@ -39,35 +39,83 @@
         </div>
     </div>
 
-    {% if sessions %}
-        <div class="table-responsive">
-            <table class="table history-table align-middle">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Duration</th>
-                        <th>Speed</th>
-                        <th>Distance</th>
-                        <th>Steps</th>
-                        <th>kJ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for session in sessions %}
-                    <tr>
-                        <td>{{ session.date }}</td>
-                        <td>{{ session.time }}</td>
-                        <td>{{ session.duration }}</td>
-                        <td>{{ session.speed_range_kmh }} km/h</td>
-                        <td>{{ session.distance_km }} km</td>
-                        <td>{{ session.steps }}</td>
-                        <td>{{ session.kilojoules }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    {% if grouped_history.months %}
+        <section class="mb-5">
+            <h2 class="history-section-title">Monthly Totals</h2>
+            <div class="table-responsive">
+                <table class="table history-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Sessions</th>
+                            <th>Time</th>
+                            <th>Distance</th>
+                            <th>Steps</th>
+                            <th>kJ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in grouped_history.months %}
+                        <tr>
+                            <td>{{ month.label }}</td>
+                            <td>{{ month.sessions }}</td>
+                            <td>{{ month.duration }}</td>
+                            <td>{{ "%.2f"|format(month.distance_km) }} km</td>
+                            <td>{{ month.steps }}</td>
+                            <td>{{ month.kilojoules }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="history-section-title">Weekly Totals</h2>
+            {% for week in grouped_history.weeks %}
+                <div class="history-week">
+                    <div class="history-week-header">
+                        <div>
+                            <p class="history-week-label">{{ week.label }}</p>
+                            <p class="history-week-meta">{{ week.sessions }} sessions</p>
+                        </div>
+                        <div class="history-week-stats">
+                            <span>{{ week.duration }}</span>
+                            <span>{{ "%.2f"|format(week.distance_km) }} km</span>
+                            <span>{{ week.steps }} steps</span>
+                            <span>{{ week.kilojoules }} kJ</span>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table history-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Day</th>
+                                    <th>Sessions</th>
+                                    <th>Time</th>
+                                    <th>Distance</th>
+                                    <th>Steps</th>
+                                    <th>kJ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for day in week.days %}
+                                <tr>
+                                    <td>{{ day.label }}</td>
+                                    <td>{{ day.sessions }}</td>
+                                    <td>{{ day.duration }}</td>
+                                    <td>{{ "%.2f"|format(day.distance_km) }} km</td>
+                                    <td>{{ day.steps }}</td>
+                                    <td>{{ day.kilojoules }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endfor %}
+        </section>
     {% else %}
         <div class="stat-card text-center">
             <p class="stat-label mb-0">No saved sessions yet.</p>
